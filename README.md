@@ -30,13 +30,25 @@ Playing with data from the team season schedule you can get the game results via
 
 Also have a bunch of other interesting data like whether home or away or neutral, etc. that could be played with.
 
-This gives 28 games in 2003, up to 34 in 2017 (NOTE TO DISTINGUISH BETWEEN LATE AND EARLY SEASON? Don't know).
+If you look at `data['events'][GAMEIDX]['id']` under
+
+`http://cdn.espn.com/core/mens-college-basketball/boxscore?xhr=1&gameId=[GAMEID]`
+
+then there is more interesting data such as
+
+`data['gamepackageJSON']['boxscore']`
+
+This gives 28 games in 2003, up to 34 in 2017. Note that the year refers to the year which that season ended, eg. 2007 refers to the 2006-07 season.
 
 There are 347-354 teams (get 354 via query but 347 online?), so then that gives minimally 72k games? However much fewer will apply to the actual tournament qualifiers (maximally 27k, but still a lot)
 
 ### Tournament data?
 
 Perhaps [here](https://data.world/michaelaroy/ncaa-tournament-results)?
+
+### Vegas Odds
+
+Can get vegas odds from 2007 to 2017 [here](https://www.sportsbookreviewsonline.com/scoresoddsarchives/ncaabasketball/ncaabasketballoddsarchives.htm), but that restricts the data further.
 
 # Approach
 
