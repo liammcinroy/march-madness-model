@@ -42,6 +42,10 @@ This gives 28 games in 2003, up to 34 in 2017. Note that the year refers to the 
 
 There are 347-354 teams (get 354 via query but 347 online?), so then that gives minimally 72k games? However much fewer will apply to the actual tournament qualifiers (maximally 27k, but still a lot)
 
+Digging into each game's boxscore, we can find the general game statistics through `data['__gamepackage__']['homeTeam' or 'awayTeam']`
+
+`data['gamepackageJSON']['boxscore']['players'][0 or 1]['statistics'][0]['totals']` which represent `data['gamepackageJSON']['boxscore']['players'][0 or 1]['statistics'][0]['labels']`. These become tracked starting in the 2006 season, but aren't before then. Also available for every player on the team, so we can generate a lot of data given a subset of starters.
+
 ### Tournament data?
 
 Perhaps [here](https://data.world/michaelaroy/ncaa-tournament-results)?
