@@ -4,6 +4,7 @@
 # Developed 11.12.18 by Liam McInroy
 
 import argparse
+import pickle
 import requests
 
 
@@ -28,74 +29,210 @@ def get_teams():
 
         # the JSON data which contains all the team data, take only id and name
         for team in data['sports'][0]['leagues'][0]['teams']:
-            teams[int(team['team']['id'])] = team['team']['name']
+            teams[int(team['team']['id'])] = team['team']['location'] + ' ' + \
+                                             team['team']['name']
 
     return teams
 
 
-def get_team_season_gids(tid, year):
-    """Gets all the season results for the specified year and team id.
+def get_team_season_gids(tid, season):
+    """Gets all the season game ids for the specified year and team id.
     Specifically returns all the game IDs that can then be looked up by
     get_game(gid)
 
     Arguments:
         tid: The team id that ESPN uses to refer to the team in its API
-        year: The year to fetch from, specifically 2002 refers to the 01/02
-            season. Make sure to provide a four digit year 2002-2017
+        season: The season to fetch from, specifically 2002 refers to the 01/02
+            season. Make sure to provide a four digit year 2002-2018
     """
     # the ESPN link that contains all the season schedule information for team
     data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
                         'basketball/mens-college-basketball/teams/{}/schedule?'
                         'region=us&lang=en&seasontype=2&'
-                        'season={}'.format(tid, year)).json()
+                        'season={}'.format(tid, season)).json()
 
     game_ids = [int(game['id']) for game in data['events']]
 
     return game_ids
 
 
-def get_game(gid):
-    """Gets all the statistics for given game ID.
+def get_team_post_gids(tid, season):
+    """Gets all the postseason game ids for the given season and team id.
+    Specifically, returns all the game IDs that can then be looked up by
+    get_game(gid)
+
+    Arguments:
+        tid: The team id that ESPN uses to refer to the team in its API
+        season: The season to fetch from, specifically 2002 refers to the 01/02
+            season and postseason. Make sure to provide a four digit year from
+            2002-2018
+    """
+    # the ESPN link that contains all the postseason schedule results for team
+    data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
+                        'basketball/mens-college-basketball/teams/{}/schedule?'
+                        'region=us&lang=en&seasontype=3&'
+                        'season={}'.format(tid, season)).json()
+
+    game_ids = [int(game['id']) for game in data['events']]
+
+    return game_ids
+
+
+def get_game(gid, **kwargs):
+    """Gets all the statistics for given game ID. Returns None if fails
 
     Arguments:
         gid: The game id that ESPN uses to refer to the game
+        kwargs: Mostly just for verbose. If positive then prints errors
     """
+
+    def printverbose(*args):
+        if kwargs.get('verbose', 0):
+            print(*args)
+
     # the ESPN link that contains all the game boxscores
     data = requests.get('http://cdn.espn.com/core/mens-college-basketball/'
                         'boxscore?xhr=1&gameId={}'.format(gid)).json()
+    
+    if 
+    
     homeTeam = data['__gamepackage__']['homeTeam']
     awayTeam = data['__gamepackage__']['awayTeam']
+    
 
-    # TODO: Implement which statistics to take
+    # TODO: Choose more statistics to take
     stats = {}
 
     # score
-    stats['score'] = (int(homeTeam['score']), int(awayTeam['score']))
+    try:
+        stats['score'] = (int(homeTeam['score']), int(awayTeam['score']))
+    except:
+        printverbose('ERROR on score: ', gid)
+        return None
 
-    # general team information about the game/season formally
-    stats['homeId'] = homeTeam['id']
-    stats['homeRecord'] = (int(homeTeam['record'][0]['summary'].split('-')[0]),
-                           int(homeTeam['record'][0]['summary'].split('-')[1]))
-    stats['homeHalfScores'] = (int(homeTeam['linescores'][0]['displayValue']),
-                               int(homeTeam['linescores'][1]['displayValue']))
-    stats['awayId'] = awayTeam['id']
-    stats['awayRecord'] = (int(awayTeam['record'][0]['summary'].split('-')[0]),
-                           int(awayTeam['record'][0]['summary'].split('-')[1]))
-    stats['awayHalfScores'] = (int(awayTeam['linescores'][0]['displayValue']),
-                               int(awayTeam['linescores'][1]['displayValue']))
+    # whether the game was played in the regular season or postseason TODO?
 
     # team game statistics, first is MIN so skip
     labels = (data['gamepackageJSON']['boxscore']['players']
               [0]['statistics'][0]['labels'])
     for k, val in enumerate(data['gamepackageJSON']['boxscore']['players']
                                 [0]['statistics'][0]['totals'][1:]):
-        stats['home' + labels[k]] = val
+        try:
+            stats['home' + labels[k]] = val
+        except:
+            printverbose('ERROR on home', labels[k], ':', gid)
+            stats['home' + labels[k]] = -1
 
     for k, val in enumerate(data['gamepackageJSON']['boxscore']['players']
                             [1]['statistics'][0]['totals'][1:]):
-        stats['away' + labels[k]] = val
+        try:
+            stats['away' + labels[k]] = val
+        except:
+            printverbose('ERROR on away', labels[k], ':', gid)
+            stats['away' + labels[k]] = -1
+
+    # general team information about the game/season formally
+    # home team first
+    try:
+        stats['homeId'] = int(homeTeam['id'])
+    except:
+        printverbose('ERROR on home id: ', gid)
+        return None
+    try:
+        stats['homeRecord'] = homeTeam['record'][0]['summary']
+    except:
+        printverbose('ERROR on home record: ', gid)
+        stats['homeRecord'] = '0-0'  # default if none is known
+    try:
+        stats['homeRank'] = int(homeTeam['rank']) if 'rank' in homeTeam else -1
+    except:
+        printverbose('ERROR on home rank: ', gid)
+        stats['homeRank'] = -1
+    try:
+        stats['homeHalfScores'] = homeTeam['linescores'][0]['displayValue']
+    except:
+        printverbose('ERROR on home half scores: ', gid)
+        stats['homeHalfScores'] = '0-0'  # default if none is known TODO
+
+    # away team
+    try:
+        stats['awayId'] = int(awayTeam['id'])
+    except:
+        printverbose('ERROR on away id: ', gid)
+        return None
+    try:
+        stats['awayRecord'] = awayTeam['record'][0]['summary']
+    except:
+        printverbose('ERROR on away record: ', gid)
+        stats['awayRecord'] = '0-0'  # default if none is known
+    try:
+        stats['awayRank'] = int(awayTeam['rank']) if 'rank' in awayTeam else -1
+    except:
+        printverbose('ERROR on away rank: ', gid)
+        stats['awayRank'] = -1
+    try:
+        stats['awayHalfScores'] = awayTeam['linescores'][0]['displayValue']
+    except:
+        printverbose('ERROR on away half scores: ', gid)
+        stats['awayHalfScores'] = '0-0'  # default if none is known TODO
 
     return stats
+
+
+def get_data(**kwargs):
+    """Pulls all the data from ESPN and dumps it in a dictionary. Specifically,
+    takes all the game data from the 2006-2017 seasons from ESPN and keeps it
+    in memory. The data is organized by its individual game id, but there is
+    also structure in the returned dictionary (namely within data['teams'])
+
+    Arguments:
+        **kwargs: Mostly just for verbose. If verbose=0 (or unassigned), then
+            silent. Otherwise outputs progress as it downloads
+    """
+    # the output dictionary. Contains information about when each game happened
+    # and also the statistics for that game
+    data = {}
+
+    # keep the teams ids. Used later to organize when each game happens
+    teams = get_teams()
+    data['teams'] = {tid: {year: {} for year in range(2006, 2018)}
+                     for tid in teams.keys()}
+
+    for year in range(2006, 2018):
+        if kwargs.get('verbose', 0):
+            print('\tFetching data from', year)
+
+        for tid in teams:
+            # get all the games that this team played this season
+            gids = get_team_season_gids(tid, year)
+            data['teams'][tid][year]['reg'] = gids
+
+            # add it to the data if it hasn't been already
+            for gid in gids:
+                if gid not in data:
+                    # get the new game and add it if it has valid data,
+                    # otherwise remove it
+                    game = get_game(gid)
+                    if game is not None:
+                        data[gid] = game
+                    else:
+                        data['teams'][tid][year]['reg'].remove(gid)
+
+            # handle the post season separately incase we want to train from it
+            pgids = get_team_post_gids(tid, year)
+            data['teams'][tid][year]['post'] = pgids
+
+            for gid in pgids:
+                if gid not in data:
+                    # get the new game and add it if it has valid data,
+                    # otherwise remove it
+                    game = get_game(gid)
+                    if game is not None:
+                        data[gid] = game
+                    else:
+                        data['teams'][tid][year]['post'].remove(gid)
+
+    return data
 
 
 def parse_args():
@@ -107,7 +244,7 @@ def parse_args():
                     ' regular season games since 2002 and then save them to'
                     ' a file.')
     parser.add_argument('file', type=str,
-                        help='The file to save the .csv to.')
+                        help='The file to save the pickled dictionary to.')
     return parser.parse_args()
 
 
@@ -117,7 +254,8 @@ def main():
     """
     args = parse_args()
 
-    return NotImplementedError()
+    with open(args.file, 'wb') as f:
+        pickle.dump(get_data(), f)
 
 
 if __name__ == '__main__':

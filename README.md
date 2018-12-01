@@ -14,7 +14,7 @@ Do something similar to
 
 ## For NCAAM Season Play data
 
-For getting specific team in date then look at 
+For getting specific team data from the regular season then look at 
 
 `https://site.web.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/[TEAMID]/schedule?region=us&lang=en&season=[YEAR]&seasontype=2`
 
@@ -27,6 +27,12 @@ Can get the team IDs by iterating through each conference groups id from
 Playing with data from the team season schedule you can get the game results via
 
 `data['events'][GAMEIDX]['competitions'][0]['competitors'][0 or 1]['id', 'score['value']', 'winner', 'etc.']`
+
+The post season games can be found from
+
+`https://site.web.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/[TEAMID]/schedule?region=us&lang=en&season=[YEAR]&seasontype=3`
+
+HOWEVER, note that the year will be the year the post season was played in, eg. 2008 is the postseason of the 2007-2008 season!
 
 Also have a bunch of other interesting data like whether home or away or neutral, etc. that could be played with.
 
