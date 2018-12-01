@@ -83,7 +83,9 @@ def get_game(gid, **kwargs):
 
     Arguments:
         gid: The game id that ESPN uses to refer to the game
-        kwargs: Mostly just for verbose. If positive then prints errors
+        kwargs: Mostly just for debugging verbosity
+
+            verbose: If positive then prints output on error, otherwise silence
     """
 
     def printverbose(*args):
@@ -93,12 +95,12 @@ def get_game(gid, **kwargs):
     # the ESPN link that contains all the game boxscores
     data = requests.get('http://cdn.espn.com/core/mens-college-basketball/'
                         'boxscore?xhr=1&gameId={}'.format(gid)).json()
-    
-    if 
-    
+
+    if '__gamepackage__' not in data:
+        return None  # didn't successfully pull the game data
+
     homeTeam = data['__gamepackage__']['homeTeam']
     awayTeam = data['__gamepackage__']['awayTeam']
-    
 
     # TODO: Choose more statistics to take
     stats = {}
@@ -111,6 +113,14 @@ def get_game(gid, **kwargs):
         return None
 
     # whether the game was played in the regular season or postseason TODO?
+
+    # whether the game was played at a neutral site
+    stats['neutralSite'] = \
+        data['gamepackageJSON']['header']['competitions'][0]['neutralSite']
+
+    # the date of the game (for temporal feature generation)
+    stats['date'] = \
+        data['gamepackageJSON']['header']['competitions'][0]['date']
 
     # team game statistics, first is MIN so skip
     labels = (data['gamepackageJSON']['boxscore']['players']
@@ -186,19 +196,27 @@ def get_data(**kwargs):
     also structure in the returned dictionary (namely within data['teams'])
 
     Arguments:
-        **kwargs: Mostly just for verbose. If verbose=0 (or unassigned), then
-            silent. Otherwise outputs progress as it downloads
+        kwargs: Mostly just for verbose, but can also choose a year range
+            or specific team ids to consider
+
+            verbose: If positive then prints output otherwise silence
+            years: a list of years to consider, if none provided does 2006-2018
+            teams: a dict of team ids and names to consider.
+                if none provided, does all.
     """
     # the output dictionary. Contains information about when each game happened
     # and also the statistics for that game
     data = {}
 
     # keep the teams ids. Used later to organize when each game happens
-    teams = get_teams()
-    data['teams'] = {tid: {year: {} for year in range(2006, 2018)}
+    teams = kwargs.get('teams', get_teams())
+    data['teams'] = {tid: {year: {}
+                           for year in kwargs.get('years', range(2006, 2018))}
                      for tid in teams.keys()}
 
-    for year in range(2006, 2018):
+    data['years'] = kwargs.get('years', [range(2006, 2018)])
+
+    for year in kwargs.get('years', range(2006, 2018)):
         if kwargs.get('verbose', 0):
             print('\tFetching data from', year)
 
@@ -212,7 +230,7 @@ def get_data(**kwargs):
                 if gid not in data:
                     # get the new game and add it if it has valid data,
                     # otherwise remove it
-                    game = get_game(gid)
+                    game = get_game(gid, **kwargs)
                     if game is not None:
                         data[gid] = game
                     else:
@@ -226,7 +244,7 @@ def get_data(**kwargs):
                 if gid not in data:
                     # get the new game and add it if it has valid data,
                     # otherwise remove it
-                    game = get_game(gid)
+                    game = get_game(gid, **kwargs)
                     if game is not None:
                         data[gid] = game
                     else:
