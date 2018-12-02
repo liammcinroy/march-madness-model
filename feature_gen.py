@@ -5,30 +5,55 @@
 # Developed 11.27.18 by Liam McInroy
 
 import argparse
-from copy import deepcopy
 import datetime
 import pickle
 
 import numpy as np
 
 
-# ALL of the possible features and their corresponding calculating functions
-POSSIBLE_FEATURES = {
-        'atHome': ,
-        'record': ,
-        'rank': ,
-        'seasonBLK': ,
-        'seasonSTL': ,
-        'seasonDREB': ,
-        'seasonOREB': ,
-        'seasonPF': ,
-        'seasonPA': ,
-        'seasonFG': ,
-        'season3PT': ,
-        'seasonFT': ,
-        'seasonTO': ,
-        'streak': ,
-        }
+class FeatureGenerators():
+    """Namespace for all the generators for features from data
+    """
+
+    @staticmethod
+    def atHomeFeature(series, tid):
+        """Get whether the target team (which is always the first in the
+        returned data) played at home.
+
+        Arguments:
+            series: An ordered list of games (in dict form)
+            tid: The team which is the targeted for this series
+        """
+        def _generator():
+            """The returned new generator. For each call yield a pair of
+            the targeted teams value then the oppositions value
+            """
+            for game in series:
+                homeTeam = game['homeId'] == tid
+                yield (homeTeam and not game['neutralSite'],
+                       not homeTeam and not game['neutralSite'])
+        return _generator()
+
+    # ALL of the possible features and their corresponding calculating functors
+    # Calling each functor (given the season games) returns a generator who on
+    # calls to returns the next point in the time series.
+    ALL = {
+            'atHome': atHomeFeature}
+    """,
+            'record': ,
+            'rank': ,
+            'seasonBLK': ,
+            'seasonSTL': ,
+            'seasonDREB': ,
+            'seasonOREB': ,
+            'seasonPF': ,
+            'seasonPA': ,
+            'seasonFG': ,
+            'season3PT': ,
+            'seasonFT': ,
+            'seasonTO': ,
+            'streak': ,
+            }"""
 
 
 def generate_features(data, **kwargs):
@@ -50,24 +75,13 @@ def generate_features(data, **kwargs):
                                           '%Y-%m-%dT%H:%MZ')
 
     # get the features to generate for this dataset
-    features = {name: func for name, func in enumerate(POSSIBLE_FEATURES)
+    features = {name: func for name, func in enumerate(FeatureGenerators.ALL)
                 if name not in kwargs.get('exclude_features', [])}
 
     # the time-series unique id discussed below
     series_idx = 0
 
-    # Begin by sorting the games by each season and then by date
     for year in data['years']:
-        # sort all the games this season
-        gids = set.union(*[set(gid for gid in data['teams'][tid][year]['reg'])
-                           for tid in data['teams']])
-
-        sorted_gids = sorted(list(gids), key=_json_date)
-
-        if kwargs.get('verbose', 0) > 1:
-            for gid in sorted_gids:
-                print(gid, data[gid]['date'])  # sanity check for sorting
-
         # we generate quite a few different features. While we borrow some from
         # ESPN directly, we also create some of our own (as well as sort them
         # for convenience when training temporal models).
@@ -98,10 +112,18 @@ def generate_features(data, **kwargs):
             # increment so that a new series (aka team's season) is identified
             series_idx += 1
 
+            # sort all the games this season
+            series = sorted(data['teams'][tid][year]['reg'], key=_json_date)
+
+            if kwargs.get('verbose', 0) > 1:
+                for game in series:
+                    print(game['date'])  # sanity check for sorting
+
             # the training features for this team FOR this season only
             teamX = np.array((len(data['teams'][tid][year]['reg']),
                               1 + len(features)), dtype=None)  # TODO type
 
+                        
 
     return NotImplementedError()
 
