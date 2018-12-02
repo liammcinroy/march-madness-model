@@ -15,7 +15,6 @@ class FeatureGenerators():
     """Namespace for all the generators for features from data
     """
 
-    @staticmethod
     def atHomeFeature(series, tid):
         """Get whether the target team (which is always the first in the
         returned data) played at home.
@@ -68,6 +67,14 @@ def generate_features(data, **kwargs):
             exclude_features: A list of features to exclude (must match a key
                 from the POSSIBLE_FEATURES dictionary)
     """
+    def printveryverbose(*msg):
+        if kwargs.get('verbose', 0) > 1:
+            print(*msg)
+
+    def printverbose(*msg):
+        if kwargs.get('verbose', 0) > 0:
+            print(*msg)
+
     def _json_date(gid):
         """returns the datetime of the given gid
         """
@@ -75,8 +82,10 @@ def generate_features(data, **kwargs):
                                           '%Y-%m-%dT%H:%MZ')
 
     # get the features to generate for this dataset
-    features = {name: func for name, func in enumerate(FeatureGenerators.ALL)
+    features = {name: func for name, func in FeatureGenerators.ALL.items()
                 if name not in kwargs.get('exclude_features', [])}
+
+    printveryverbose(features)
 
     # The X, y consisting of the series, not individual datapoints
     X_series = []
@@ -117,23 +126,25 @@ def generate_features(data, **kwargs):
             series_idx += 1
 
             # sort all the games this season
-            series = sorted(data['teams'][tid][year]['reg'], key=_json_date)
+            series_gids = sorted(data['teams'][tid][year]['reg'],
+                                 key=_json_date)
+            series = [data[gid] for gid in series_gids]
 
-            if kwargs.get('verbose', 0) > 1:
-                for game in series:
-                    print(game['date'])  # sanity check for sorting
+            for game in series:
+                printveryverbose(game['date'])  # sanity check for sorting
 
             # the training features for this team FOR this season only
-            teamX = np.array((len(data['teams'][tid][year]['reg']),
-                              1 + 2 * len(features)), dtype=None)  # TODO type
+            teamX = np.full((len(data['teams'][tid][year]['reg']),
+                             1 + 2 * len(features)), None, dtype=None)  # TODO type
             teamX[:, 0] = series_idx
 
             features_unproc = [[v for v in fGen(series, tid)]
-                               for fGen in features]
-            for j, fGen in enumerate(features):  # TODO get in sorted, same order everytime
+                               for name, fGen in features.items()]
+            for j, (name, fGen) in enumerate(features.items()):  # TODO get in sorted, same order everytime
                 # the columns which correspond to this feature for home, away team
                 col_idxes = (1 + j, 1 + j + len(features))
-                for i, v in fGen(series, tid):
+                printveryverbose(name, col_idxes)
+                for i, v in enumerate(fGen(series, tid)):
                     teamX[i, col_idxes] = v
 
             teamY = None  # TODO
