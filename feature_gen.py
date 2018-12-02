@@ -78,6 +78,10 @@ def generate_features(data, **kwargs):
     features = {name: func for name, func in enumerate(FeatureGenerators.ALL)
                 if name not in kwargs.get('exclude_features', [])}
 
+    # The X, y consisting of the series, not individual datapoints
+    X_series = []
+    y_series = []
+
     # the time-series unique id discussed below
     series_idx = 0
 
@@ -121,11 +125,24 @@ def generate_features(data, **kwargs):
 
             # the training features for this team FOR this season only
             teamX = np.array((len(data['teams'][tid][year]['reg']),
-                              1 + len(features)), dtype=None)  # TODO type
+                              1 + 2 * len(features)), dtype=None)  # TODO type
+            teamX[:, 0] = series_idx
 
-                        
+            features_unproc = [[v for v in fGen(series, tid)]
+                               for fGen in features]
+            for j, fGen in enumerate(features):  # TODO get in sorted, same order everytime
+                # the columns which correspond to this feature for home, away team
+                col_idxes = (1 + j, 1 + j + len(features))
+                for i, v in fGen(series, tid):
+                    teamX[i, col_idxes] = v
 
-    return NotImplementedError()
+            teamY = None  # TODO
+
+            X_series.append(teamX)
+            y_series.append(teamY)
+
+    # stack all the series so that we can train on individual games instead of just series of games
+    return (np.vstack(X_series), np.vstack(y_series))
 
 
 def parse_args():
