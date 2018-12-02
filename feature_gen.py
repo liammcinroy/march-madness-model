@@ -33,25 +33,82 @@ class FeatureGenerators():
                        not homeTeam and not game['neutralSite'])
         return _generator()
 
+    def getAverageFeature(func):
+        """Analyzes the average value of the func applied to each game
+
+        Arguments:
+            func: A function mapping a game data point and a target tid
+                to a two-tuple which the average is calculated over
+        """
+        def _func(series, tid):
+            """Analyzes a statistic and gives the average of it 
+
+            Arguments:
+                series: An ordered list of games (in dict form)
+                tid: The team which is the targeted for this series
+            """
+            def _generator():
+                """The returned new generator. For each call yield a pair of
+                the targeted teams value then the oppositions value
+                """
+                avgTarg = 0
+                avgOpp = 0
+                for i, game in enumerate(series):
+                    valTarg, valOpp = func(game, tid)
+                    avgTarg = (i * avgTarg + valTarg) / (i + 1.)
+                    avgOpp = (i * avgOpp + valOpp) / (i + 1.)
+                    yield (avgTarg, avgOpp)
+            
+            return _generator()
+
+        return _func
+
+    def getStatisticFunc(label):
+        """Returns a function which gives the statistics from the game for the
+        given label.
+
+        Arguments:
+            label: The label used to refer to the statistic. For instance
+                blocks has label 'BLK' in ESPN.
+        """
+
+        def _func(game, tid):
+            """Does the actual extracting. Returns as a float
+
+            Arguments:
+                game: The game data object.
+                tid: The target team to order the pair by.
+            """
+            if game['homeId'] == tid:
+                return (float(game['home' + label]),
+                        float(game['away' + label]))
+            else:
+                return (float(game['away' + label]),
+                        float(game['home' + label]))
+
+        return _func
+
     # ALL of the possible features and their corresponding calculating functors
     # Calling each functor (given the season games) returns a generator who on
     # calls to returns the next point in the time series.
     ALL = {
-            'atHome': atHomeFeature}
-    """,
-            'record': ,
-            'rank': ,
-            'seasonBLK': ,
-            'seasonSTL': ,
-            'seasonDREB': ,
-            'seasonOREB': ,
-            'seasonPF': ,
-            'seasonPA': ,
-            'seasonFG': ,
+            'atHome': atHomeFeature,
+            'seasonBLK': getAverageFeature(getStatisticFunc('BLK')),
+            'seasonSTL': getAverageFeature(getStatisticFunc('STL')),
+            'seasonDREB': getAverageFeature(getStatisticFunc('DREB')),
+            'seasonOREB': getAverageFeature(getStatisticFunc('OREB')),
+            'seasonAST': getAverageFeature(getStatisticFunc('AST')),
+            'seasonPF': getAverageFeature(getStatisticFunc('PF')),
+            'seasonFT': getAverageFeature(getStatisticFunc('FT')),
+            'seasonTO': getAverageFeature(getStatisticFunc('TO'))
+            }
+
+    # TODO
+    """     'seasonFG': ,
             'season3PT': ,
-            'seasonFT': ,
-            'seasonTO': ,
             'streak': ,
+            'rank': ,
+            'record': ,
             }"""
 
 
