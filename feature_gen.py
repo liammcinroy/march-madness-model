@@ -51,13 +51,18 @@ class FeatureGenerators():
                 """The returned new generator. For each call yield a pair of
                 the targeted teams value then the oppositions value
                 """
+                # begin with zero since there are no priors for the first
+                # game of the season. If predicting on post-season, then
+                # possibly manually insert?
+                yield (0, 0)
                 avgTarg = 0
                 avgOpp = 0
                 for i, game in enumerate(series):
                     valTarg, valOpp = func(game, tid)
                     avgTarg = (i * avgTarg + valTarg) / (i + 1.)
                     avgOpp = (i * avgOpp + valOpp) / (i + 1.)
-                    yield (avgTarg, avgOpp)
+                    if len(series) > i + 1:
+                        yield (avgTarg, avgOpp)
             
             return _generator()
 
@@ -98,13 +103,14 @@ class FeatureGenerators():
             'seasonDREB': getAverageFeature(getStatisticFunc('DREB')),
             'seasonOREB': getAverageFeature(getStatisticFunc('OREB')),
             'seasonAST': getAverageFeature(getStatisticFunc('AST')),
-            'seasonPF': getAverageFeature(getStatisticFunc('PF')),
             'seasonFT': getAverageFeature(getStatisticFunc('FT')),
-            'seasonTO': getAverageFeature(getStatisticFunc('TO'))
+            'seasonTO': getAverageFeature(getStatisticFunc('TO')),
+            'seasonPF': getAverageFeature(getStatisticFunc('PF')),
             }
 
     # TODO
-    """     'seasonFG': ,
+    """     'seasonPA': ,
+            'seasonFG': ,
             'season3PT': ,
             'streak': ,
             'rank': ,

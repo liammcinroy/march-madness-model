@@ -94,7 +94,12 @@ def get_game(gid, **kwargs):
 
     # the ESPN link that contains all the game boxscores
     data = requests.get('http://cdn.espn.com/core/mens-college-basketball/'
-                        'boxscore?xhr=1&gameId={}'.format(gid)).json()
+                        'boxscore?xhr=1&gameId={}'.format(gid))
+    try:
+        data = data.json()
+    except Exception as e:
+        print('ERROR:', gid)
+        raise e
 
     if '__gamepackage__' not in data:
         return None  # didn't successfully pull the game data
