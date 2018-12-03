@@ -5,6 +5,8 @@
 import argparse
 import pickle
 
+import numpy as np
+
 
 def train_naive_bayes(data):
     """Train a naive bayesian model on the given features data
@@ -53,9 +55,10 @@ def main():
     """
     args = parse_args()
 
-    data = {}
+    X = np.array((0, 0))
+    y = np.array((0, 0))
     with open(args.data, 'rb') as f:
-        data = pickle.load(f)
+        X, y = pickle.load(f)
 
     return NotImplementedError()
 

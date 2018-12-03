@@ -117,8 +117,6 @@ def get_game(gid, **kwargs):
         printverbose('ERROR on score: ', gid)
         return None
 
-    # whether the game was played in the regular season or postseason TODO?
-
     # whether the game was played at a neutral site
     stats['neutralSite'] = \
         data['gamepackageJSON']['header']['competitions'][0]['neutralSite']

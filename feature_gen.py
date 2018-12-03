@@ -41,7 +41,7 @@ class FeatureGenerators():
                 to a two-tuple which the average is calculated over
         """
         def _func(series, tid):
-            """Analyzes a statistic and gives the average of it 
+            """Analyzes a statistic and gives the average of it
 
             Arguments:
                 series: An ordered list of games (in dict form)
@@ -63,7 +63,7 @@ class FeatureGenerators():
                     avgOpp = (i * avgOpp + valOpp) / (i + 1.)
                     if len(series) > i + 1:
                         yield (avgTarg, avgOpp)
-            
+
             return _generator()
 
         return _func
@@ -198,11 +198,13 @@ def generate_features(data, **kwargs):
 
             # the training features for this team FOR this season only
             teamX = np.full((len(data['teams'][tid][year]['reg']),
-                             1 + 2 * len(features)), None, dtype=None)  # TODO type
+                             1 + 2 * len(features)), None, dtype=None)
             teamX[:, 0] = series_idx
 
+            # go through all the features, but sort by name so that get the
+            # same order on every datapoint
             for j, (name, fGen) in enumerate(sorted(features.items())):
-                # the columns which correspond to this feature for home, away team
+                # the columns this feature uses for home, away team
                 col_idxes = (1 + j, 1 + j + len(features))
                 printveryverbose(name, col_idxes)
                 for i, v in enumerate(fGen(series, tid)):
@@ -220,7 +222,8 @@ def generate_features(data, **kwargs):
             X_series.append(teamX)
             y_series.append(teamY)
 
-    # stack all the series so that we can train on individual games instead of just series of games
+    # stack all the series so that we can train on individual games instead
+    # of just series of games
     return (np.vstack(X_series), np.vstack(y_series))
 
 
@@ -247,7 +250,9 @@ def main():
     with open(args.infile, 'rb') as f:
         data = pickle.load(f)
 
-    return NotImplementedError()
+    X, y = generate_features(data)
+    with open(args.outfile, 'wb') as f:
+        pickle.dump((X, y))
 
 
 if __name__ == '__main__':
