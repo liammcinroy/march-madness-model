@@ -195,16 +195,21 @@ def generate_features(data, **kwargs):
                              1 + 2 * len(features)), None, dtype=None)  # TODO type
             teamX[:, 0] = series_idx
 
-            features_unproc = [[v for v in fGen(series, tid)]
-                               for name, fGen in features.items()]
-            for j, (name, fGen) in enumerate(features.items()):  # TODO get in sorted, same order everytime
+            for j, (name, fGen) in enumerate(sorted(features.items())):
                 # the columns which correspond to this feature for home, away team
                 col_idxes = (1 + j, 1 + j + len(features))
                 printveryverbose(name, col_idxes)
                 for i, v in enumerate(fGen(series, tid)):
                     teamX[i, col_idxes] = v
 
-            teamY = None  # TODO
+            # for now, we only consider the outcome as a binary variable rather
+            # than a range of possible scores.
+            teamY = np.full((teamX.shape[0], 1), 0, dtype=int)
+            for i, game in enumerate(series):
+                if game['homeId'] == tid:
+                    teamY[i, 0] = game['score'][0] > game['score'][1]
+                else:
+                    teamY[i, 0] = game['score'][1] > game['score'][0]
 
             X_series.append(teamX)
             y_series.append(teamY)
