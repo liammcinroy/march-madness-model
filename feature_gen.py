@@ -24,13 +24,12 @@ class FeatureGenerators():
             tid: The team which is the targeted for this series
         """
         def _generator():
-            """The returned new generator. For each call yield a pair of
-            the targeted teams value then the oppositions value
+            """The returned new generator. For each call yields the targeted
+            team's value ONLY.
             """
             for game in series:
                 homeTeam = game['homeId'] == tid
-                yield (homeTeam and not game['neutralSite'],
-                       not homeTeam and not game['neutralSite'])
+                yield homeTeam and not game['neutralSite']
         return _generator()
 
     def getAverageFeature(func):
@@ -38,7 +37,7 @@ class FeatureGenerators():
 
         Arguments:
             func: A function mapping a game data point and a target tid
-                to a two-tuple which the average is calculated over
+                to a value which the average is calculated over
         """
         def _func(series, tid):
             """Analyzes a statistic and gives the average of it
@@ -48,21 +47,18 @@ class FeatureGenerators():
                 tid: The team which is the targeted for this series
             """
             def _generator():
-                """The returned new generator. For each call yield a pair of
-                the targeted teams value then the oppositions value
+                """The returned new generator. For each call yields the
+                targeted team's value ONLY.
                 """
                 # begin with zero since there are no priors for the first
                 # game of the season. If predicting on post-season, then
                 # possibly manually insert?
-                yield (0, 0)
-                avgTarg = 0
-                avgOpp = 0
+                yield 0
+                avg = 0
                 for i, game in enumerate(series):
-                    valTarg, valOpp = func(game, tid)
-                    avgTarg = (i * avgTarg + valTarg) / (i + 1.)
-                    avgOpp = (i * avgOpp + valOpp) / (i + 1.)
+                    avg = (i * avg + func(game, tid)) / (i + 1.)
                     if len(series) > i + 1:
-                        yield (avgTarg, avgOpp)
+                        yield avg
 
             return _generator()
 
@@ -85,15 +81,11 @@ class FeatureGenerators():
                 tid: The target team to order the pair by.
             """
             if game['homeId'] == tid:
-                return (float(game['home' + label]),
-                        float(game['away' + label]))
+                return float(game['home' + label])
             else:
-                return (float(game['away' + label]),
-                        float(game['home' + label]))
+                return float(game['away' + label])
 
         return _func
-
-    # TODO TODO TODO currently computes the average of all the opponents values, need to separate it out to return only the target team and then refill everything else in later
 
     # ALL of the possible features and their corresponding calculating functors
     # Calling each functor (given the season games) returns a generator who on
@@ -186,10 +178,12 @@ def generate_features(data, **kwargs):
         # we can also average between the two different representations if
         # at a neutral site during the tournament)
 
-        for tid in data['teams']:
-            # increment so that a new series (aka team's season) is identified
-            series_idx += 1
+        # a dictionary mapping each game id to a dict with each of the opposing
+        # teams' ids with their calculated features. After this is filled, it
+        # is distilled into the final matrix
+        features_unmatched = {}
 
+        for tid in data['teams']:
             # sort all the games this season
             series_gids = sorted(data['teams'][tid][year]['reg'],
                                  key=_json_date)
@@ -199,27 +193,56 @@ def generate_features(data, **kwargs):
                 printveryverbose(game['date'])  # sanity check for sorting
 
             # the training features for this team FOR this season only
-            teamX = np.full((len(data['teams'][tid][year]['reg']),
-                             1 + 2 * len(features)), None, dtype=None)
-            teamX[:, 0] = series_idx
-
             # go through all the features, but sort by name so that get the
             # same order on every datapoint
             for j, (name, fGen) in enumerate(sorted(features.items())):
-                # the columns this feature uses for home, away team
-                col_idxes = (1 + j, 1 + j + len(features))
-                printveryverbose(name, col_idxes)
                 for i, v in enumerate(fGen(series, tid)):
-                    teamX[i, col_idxes] = v
+                    # if the game has no values, then create its entry
+                    if series_gids[i] not in features_unmatched:
+                        features_unmatched[series_gids[i]] = \
+                            {series[i]['homeId']: [None] * len(features),
+                             series[i]['awayId']: [None] * len(features)}
+                    # insert the value
+                    features_unmatched[series_gids[i]][tid][j] = v
+
+        # now that we have all the features for every team for every game,
+        # we can generate the final tables
+        for tid in data['teams']:
+            # increment so that a new series (aka team's season) is identified
+            series_idx += 1
+
+            # since each season is so short, it is better to just recompute
+            # the sorting of the games since otherwise the memory becomes too
+            # large when we have 350 teams with 27-29 games
+            series_gids = sorted(data['teams'][tid][year]['reg'],
+                                 key=_json_date)
+
+            # make the table for the team, number of features for each team
+            # and also the unique series identification
+            teamX = np.full((len(series_gids), 1 + 2 * len(features)),
+                            None, dtype=None)
 
             # for now, we only consider the outcome as a binary variable rather
             # than a range of possible scores.
             teamY = np.full((teamX.shape[0], 1), 0, dtype=int)
-            for i, game in enumerate(series):
+            for i, gid in enumerate(data[series_gids]):
+                game = data[gid]
+
+                # get the result of the game and the opposing team's id
+                opp_tid = -1
                 if game['homeId'] == tid:
+                    opp_tid = game['awayId']
                     teamY[i, 0] = game['score'][0] > game['score'][1]
                 else:
+                    opp_tid = game['homeId']
                     teamY[i, 0] = game['score'][1] > game['score'][0]
+
+                # set the features. series_idx followed by target team's
+                # features followed by the opposing team's features
+                teamX[i, 0] = series_idx
+                mid = len(features) + 1
+                teamX[i, 1:mid] = features_unmatched[gid][tid]
+                teamX[i, mid:] = features_unmatched[gid][opp_tid]
 
             X_series.append(teamX)
             y_series.append(teamY)
