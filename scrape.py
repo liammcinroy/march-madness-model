@@ -6,6 +6,7 @@
 import argparse
 import json
 import requests
+import os.path
 
 
 def get_teams():
@@ -255,12 +256,12 @@ def get_data(**kwargs):
     # keep the teams ids. Used later to organize when each game happens
     teams = kwargs.get('teams', get_teams())
     data['teams'] = {tid: {year: {}
-                           for year in kwargs.get('years', range(2006, 2018))}
+                           for year in kwargs.get('years', range(2006, 2019))}
                      for tid in teams.keys()}
 
-    data['years'] = kwargs.get('years', [range(2006, 2018)])
+    data['years'] = kwargs.get('years', [i for i in range(2006, 2019)])
 
-    for year in kwargs.get('years', range(2006, 2018)):
+    for year in kwargs.get('years', range(2006, 2019)):
         if kwargs.get('verbose', 0):
             print('\tFetching data from', year)
 
@@ -279,6 +280,8 @@ def get_data(**kwargs):
                         data[gid] = game
                     else:
                         data['teams'][tid][year]['reg'].remove(gid)
+
+            continue  # TODO currently don't care about postseason
 
             # handle the post season separately incase we want to train from it
             pgids = get_team_post_gids(tid, year)
@@ -304,9 +307,10 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Scrape ESPN\'s website for all of the NCAA men\'s games'
                     ' regular season games since 2006 and then save them to'
-                    ' a file.')
-    parser.add_argument('file', type=str,
-                        help='The file to save the jsond dictionary to.')
+                    ' a folder.')
+    parser.add_argument('folder', type=str,
+                        help='The folder to save the jsond dictionaries to. '
+                             'One per year.')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Whether to output the current process')
     return parser.parse_args()
@@ -318,8 +322,45 @@ def main():
     """
     args = parse_args()
 
-    with open(args.file, 'w') as f:
-        json.dump(get_data(verbose=args.verbose), f)
+    # save each year individually
+    for year in range(2006, 2019):
+        # don't download if we already have it
+        if os.path.exists(os.path.join(args.folder, str(year) + '.json')):
+            continue
+        with open(os.path.join(args.folder, str(year) + '.json'), 'w') as f:
+            json.dump(get_data(verbose=args.verbose, years=[year]), f)
+        print('DOWNLOADED: ', year)
+
+    print('DONE DOWNLOADING, NOW MERGING RESULTS')
+
+    # once done, merge all the results
+    cum_data = {'years': [i for i in range(2006, 2019)], 'teams': {}}
+    for year in range(2006, 2019):
+        year_data = {}
+        with open(os.path.join(args.folder, str(year) + '.json'), 'r') as f:
+            year_data = json.load(f)
+        # update the catalog of game ids for each team, season
+        for tid, seasons in year_data['teams'].items():
+            if tid not in cum_data['teams']:
+                cum_data['teams'][tid] = seasons
+            else:
+                for year, games in seasons.items():
+                    if year not in cum_data['teams'][tid]:
+                        cum_data['teams'][tid][year] = games
+        # now add the game information, note that even though 'teams' and
+        # 'years' aren't game ids, they are already in cum_data so no
+        # overwrites will happen
+        for gid in year_data:
+            if gid not in cum_data:
+                cum_data[gid] = year_data[gid]
+        print('MERGED: ', year)
+
+    with open(os.path.join(args.folder, 'all.json'), 'w') as f:
+        json.dump(cum_data, f)
+
+    print('FINISHED. DATA WRITTEN TO:', args.folder)
+
+    return
 
 
 if __name__ == '__main__':
