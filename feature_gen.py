@@ -6,7 +6,7 @@
 
 import argparse
 import datetime
-import pickle
+import json
 
 import numpy as np
 
@@ -92,6 +92,8 @@ class FeatureGenerators():
                         float(game['home' + label]))
 
         return _func
+
+    # TODO TODO TODO currently computes the average of all the opponents values, need to separate it out to return only the target team and then refill everything else in later
 
     # ALL of the possible features and their corresponding calculating functors
     # Calling each functor (given the season games) returns a generator who on
@@ -247,12 +249,12 @@ def main():
     args = parse_args()
 
     data = {}
-    with open(args.infile, 'rb') as f:
-        data = pickle.load(f)
+    with open(args.infile, 'r') as f:
+        data = json.load(f)
 
     X, y = generate_features(data)
-    with open(args.outfile, 'wb') as f:
-        pickle.dump((X, y))
+    with open(args.outfile, 'w') as f:
+        json.dump((X, y))
 
 
 if __name__ == '__main__':

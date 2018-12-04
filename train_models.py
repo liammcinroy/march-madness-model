@@ -3,7 +3,7 @@
 # Developed by Liam McInroy on 11.30.18
 
 import argparse
-import pickle
+import json
 
 import numpy as np
 
@@ -57,8 +57,8 @@ def main():
 
     X = np.array((0, 0))
     y = np.array((0, 0))
-    with open(args.data, 'rb') as f:
-        X, y = pickle.load(f)
+    with open(args.data, 'r') as f:
+        X, y = json.load(f)
 
     return NotImplementedError()
 

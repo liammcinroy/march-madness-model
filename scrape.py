@@ -4,7 +4,7 @@
 # Developed 11.12.18 by Liam McInroy
 
 import argparse
-import pickle
+import json
 import requests
 
 
@@ -42,14 +42,18 @@ def get_team_season_gids(tid, season):
 
     Arguments:
         tid: The team id that ESPN uses to refer to the team in its API
-        season: The season to fetch from, specifically 2002 refers to the 01/02
-            season. Make sure to provide a four digit year 2002-2018
+        season: The season to fetch from, specifically 2006 refers to the 01/02
+            season. Make sure to provide a four digit year 2006-2018
     """
     # the ESPN link that contains all the season schedule information for team
     data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
                         'basketball/mens-college-basketball/teams/{}/schedule?'
                         'region=us&lang=en&seasontype=2&'
                         'season={}'.format(tid, season)).json()
+
+    if 'events' not in data:
+        print('NO TEAM DATA:', tid, season)
+        return []
 
     game_ids = [int(game['id']) for game in data['events']]
 
@@ -63,9 +67,9 @@ def get_team_post_gids(tid, season):
 
     Arguments:
         tid: The team id that ESPN uses to refer to the team in its API
-        season: The season to fetch from, specifically 2002 refers to the 01/02
+        season: The season to fetch from, specifically 2006 refers to the 01/02
             season and postseason. Make sure to provide a four digit year from
-            2002-2018
+            2006-2018
     """
     # the ESPN link that contains all the postseason schedule results for team
     data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
@@ -73,13 +77,18 @@ def get_team_post_gids(tid, season):
                         'region=us&lang=en&seasontype=3&'
                         'season={}'.format(tid, season)).json()
 
+    if 'events' not in data:
+        print('NO POST-SEASON TEAM DATA:', tid, season)
+        return []
+
     game_ids = [int(game['id']) for game in data['events']]
 
     return game_ids
 
 
 def get_game(gid, **kwargs):
-    """Gets all the statistics for given game ID. Returns None if fails
+    """Gets all the statistics for given game ID. Returns None if fails, which
+    currently how to process that during training is difficult.
 
     Arguments:
         gid: The game id that ESPN uses to refer to the game
@@ -93,13 +102,20 @@ def get_game(gid, **kwargs):
             print(*args)
 
     # the ESPN link that contains all the game boxscores
-    data = requests.get('http://cdn.espn.com/core/mens-college-basketball/'
-                        'boxscore?xhr=1&gameId={}'.format(gid))
+    data = None
+
+    try:
+        data = requests.get('http://cdn.espn.com/core/mens-college-basketball/'
+                            'boxscore?xhr=1&gameId={}'.format(gid))
+    except:
+        print('COULDN\'T CONNECT TO ESPN:', gid)
+        return None
+
     try:
         data = data.json()
-    except Exception as e:
-        print('ERROR:', gid)
-        raise e
+    except:
+        print('JSON PROCESSING ERROR:', gid)
+        return None
 
     if '__gamepackage__' not in data:
         return None  # didn't successfully pull the game data
@@ -262,10 +278,12 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(
         description='Scrape ESPN\'s website for all of the NCAA men\'s games'
-                    ' regular season games since 2002 and then save them to'
+                    ' regular season games since 2006 and then save them to'
                     ' a file.')
     parser.add_argument('file', type=str,
-                        help='The file to save the pickled dictionary to.')
+                        help='The file to save the jsond dictionary to.')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Whether to output the current process')
     return parser.parse_args()
 
 
@@ -275,8 +293,8 @@ def main():
     """
     args = parse_args()
 
-    with open(args.file, 'wb') as f:
-        pickle.dump(get_data(), f)
+    with open(args.file, 'w') as f:
+        json.dump(get_data(verbose=args.verbose), f)
 
 
 if __name__ == '__main__':
