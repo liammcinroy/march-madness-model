@@ -11,17 +11,26 @@ import json
 import numpy as np
 
 
+def _teamWon(game, tid):
+    """Determines if the targeted team won the game.
+
+    Arguments:
+        game: The game data object.
+        tid: The target team to test if they won.
+    """
+    homeWin = game['score'][0] > game['score'][1]
+    return not (game['homeId'] == tid ^ homeWin)
+
+
 class FeatureGenerators():
     """Namespace for all the generators for features from data
     """
-
-    def atHomeFeature(series, tid):
-        """Get whether the target team (which is always the first in the
-        returned data) played at home.
+    def _atHomeFeature(series, tid):
+        """Get whether the target team.
 
         Arguments:
-            series: An ordered list of games (in dict form)
-            tid: The team which is the targeted for this series
+            series: An ordered list of games (in dict form).
+            tid: The team which is the targeted for this series.
         """
         def _generator():
             """The returned new generator. For each call yields the targeted
@@ -30,6 +39,87 @@ class FeatureGenerators():
             for game in series:
                 homeTeam = game['homeId'] == tid
                 yield homeTeam and not game['neutralSite']
+        return _generator()
+
+    def _streakFeature(series, tid):
+        """Gets the current win/loss streak for the target team.
+
+        Arguments:
+            series: An ordered list of games (in dict form).
+            tid: The team which is targeted for this series.
+        """
+
+        def _generator():
+            """The returned new generator. For each call yields the targeted
+            team's value ONLY.
+            """
+            streak = 0
+            yield streak
+            for i, game in enumerate(series):
+                win = _teamWon(game, tid)
+                if win and streak > 0:
+                    streak += 1
+                elif not win and streak < 0:
+                    streak -= 1
+                elif not win and streak > 0:
+                    streak = -1
+                else:
+                    streak = 1
+
+                # only return for data for games played prior to this one
+                if i + 1 < len(series):
+                    yield streak
+        return _generator()
+
+    def _winPctFeature(series, tid):
+        """Gets the current win/loss percentage for the target team.
+
+        Arguments:
+            series: An ordered list of games (in dict form).
+            tid: The team which is targeted for this series.
+        """
+
+        def _generator():
+            """The returned new generator. For each call yields the targeted
+            team's value ONLY.
+            """
+            wins = 0
+            yield wins
+            for i, game in enumerate(series):
+                wins += 1 if _teamWon(game, tid) else 0
+
+                # only return for games played prior to this one
+                if i + 1 < len(series):
+                    yield wins / (1. + i)
+        return _generator()
+
+    def _winPctRankedFeature(series, tid):
+        """Gets the current win/loss percentage for the target team AGAINST
+        ranked teams only.
+
+        Arguments:
+            series: An ordered list of games (in dict form).
+            tid: The team which is targeted for this series.
+        """
+
+        def _generator():
+            """The returned new generator. For each call yields the targeted
+            team's value ONLY.
+            """
+            wins = 0
+            rankedGames = 0
+            yield wins
+            for i, game in enumerate(series):
+                if game['homeId'] == tid and game['awayRank'] > 0:
+                    rankedGames += 1.
+                    wins += 1 if _teamWon(game, tid) else 0
+                elif game['homeId'] != tid and game['homeRank'] > 0:
+                    rankedGames += 1.
+                    wins += 1 if _teamWon(game, tid) else 0
+
+                # only return for games played prior to this one
+                if i + 1 < len(series):
+                    yield wins / rankedGames if rankedGames > 0 else 0
         return _generator()
 
     def getAverageFeature(func):
@@ -59,9 +149,7 @@ class FeatureGenerators():
                     avg = (i * avg + func(game, tid)) / (i + 1.)
                     if len(series) > i + 1:
                         yield avg
-
             return _generator()
-
         return _func
 
     def getStatisticFunc(label):
@@ -78,7 +166,7 @@ class FeatureGenerators():
 
             Arguments:
                 game: The game data object.
-                tid: The target team to order the pair by.
+                tid: The target team to calculate for..
             """
             if game['homeId'] == tid:
                 return float(game['home' + label])
@@ -87,11 +175,54 @@ class FeatureGenerators():
 
         return _func
 
+    def _getPA(game, tid):
+        """Gets the points against the team for this game.
+
+        Arguments:
+            game: The game data object.
+            tid: The target team to calculate for.
+        """
+        if game['homeId'] == tid:
+            return float(game['score'][1])
+        else:
+            return float(game['score'][0])
+
+    def _getFGPct(game, tid):
+        """Gets the FG percentage for the team for this game.
+
+        Arguments:
+            game: The game data object.
+            tid: The target team to calculate for.
+        """
+        if game['homeId'] == tid:
+            made, miss = game['homeFG'].split('-')
+            return float(made) / (int(made) + int(miss))
+        else:
+            made, miss = game['awayFG'].split('-')
+            return float(made) / (int(made) + int(miss))
+
+    def _get3PTPct(game, tid):
+        """Gets the 3PT percentage for the team for this game.
+
+        Arguments:
+            game: The game data object.
+            tid: The target team to calculate for.
+        """
+        if game['homeId'] == tid:
+            made, miss = game['home3PT'].split('-')
+            return float(made) / (int(made) + int(miss))
+        else:
+            made, miss = game['away3PT'].split('-')
+            return float(made) / (int(made) + int(miss))
+
     # ALL of the possible features and their corresponding calculating functors
     # Calling each functor (given the season games) returns a generator who on
     # calls to returns the next point in the time series.
     ALL = {
-            'atHome': atHomeFeature,
+            'atHome': _atHomeFeature,
+            'streak': _streakFeature,
+            'win%': _winPctFeature,
+            'seasonWin%Ranked': _winPctRankedFeature,
             'seasonBLK': getAverageFeature(getStatisticFunc('BLK')),
             'seasonSTL': getAverageFeature(getStatisticFunc('STL')),
             'seasonDREB': getAverageFeature(getStatisticFunc('DREB')),
@@ -100,16 +231,10 @@ class FeatureGenerators():
             'seasonFT': getAverageFeature(getStatisticFunc('FT')),
             'seasonTO': getAverageFeature(getStatisticFunc('TO')),
             'seasonPF': getAverageFeature(getStatisticFunc('PF')),
+            'seasonPA': getAverageFeature(_getPA),
+            'seasonFG%': getAverageFeature(_getFGPct),
+            'season3PT%': getAverageFeature(_get3PTPct),
             }
-
-    # TODO
-    """     'seasonPA': ,
-            'seasonFG': ,
-            'season3PT': ,
-            'streak': ,
-            'rank': ,
-            'record': ,
-            }"""
 
 
 def generate_features(data, **kwargs):

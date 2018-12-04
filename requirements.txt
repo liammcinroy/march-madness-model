@@ -1,1 +1,9 @@
+# formatting data
 numpy
+
+# the standard ML libraries
+scipy
+scikit-learn
+
+# naive bayes classifier
+pomegranate

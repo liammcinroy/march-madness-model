@@ -38,6 +38,7 @@ Since we want the functionality to create a temporal model which examines a team
 At the conclusion of this computation, then `X` and `y` are returned and saved to a JSON file.
 
 
+
 Finally, note that all the functions implemented in `feature_gen.py` are designed to be functional when imported as well, and contain more specific documentation on their exact use in the source.
 
 ## `train_models.py`
