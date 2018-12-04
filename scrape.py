@@ -12,27 +12,30 @@ def get_teams():
     """Get all the team ids and names which ESPN uses to refer to them within
     their API.
     """
-    # the ESPN link to get all the conferences from
-    data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
-                        'basketball/mens-college-basketball/scoreboard/'
-                        'conferences?groups=50').json()
-
-    # specifically pull the each conferences' ids
-    conf_ids = [int(conf['groupId']) for conf in data['conferences'][1:]]
-
-    teams = {}
-    for conf_id in conf_ids:
-        # the ESPN link to get the information for a conference from
+    try:
+        # the ESPN link to get all the conferences from
         data = requests.get('https://site.web.api.espn.com/apis/site/v2/'
                             'sports/basketball/mens-college-basketball/'
-                            'teams?groups={}'.format(conf_id)).json()
+                            'scoreboard/conferences?groups=50').json()
+        # specifically pull the each conferences' ids
+        conf_ids = [int(conf['groupId']) for conf in data['conferences'][1:]]
 
-        # the JSON data which contains all the team data, take only id and name
-        for team in data['sports'][0]['leagues'][0]['teams']:
-            teams[int(team['team']['id'])] = team['team']['location'] + ' ' + \
-                                             team['team']['name']
+        teams = {}
+        for conf_id in conf_ids:
+            # the ESPN link to get the information for a conference from
+            data = requests.get('https://site.web.api.espn.com/apis/site/v2/'
+                                'sports/basketball/mens-college-basketball/'
+                                'teams?groups={}'.format(conf_id)).json()
 
-    return teams
+            # the JSON data containing all the team data, take only id, name
+            for team in data['sports'][0]['leagues'][0]['teams']:
+                teams[int(team['team']['id'])] = team['team']['location'] + \
+                                                 ' ' + team['team']['name']
+
+        return teams
+    except:
+        print('COULDN\'T GET TEAMS. ABORTING.')
+        exit(1)
 
 
 def get_team_season_gids(tid, season):
@@ -46,10 +49,21 @@ def get_team_season_gids(tid, season):
             season. Make sure to provide a four digit year 2006-2018
     """
     # the ESPN link that contains all the season schedule information for team
-    data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
-                        'basketball/mens-college-basketball/teams/{}/schedule?'
-                        'region=us&lang=en&seasontype=2&'
-                        'season={}'.format(tid, season)).json()
+    data = None
+    try:
+        data = requests.get('https://site.web.api.espn.com/apis/site/v2/'
+                            'sports/basketball/mens-college-basketball/'
+                            'teams/{}/schedule?lang=en&seasontype=2&'
+                            'season={}'.format(tid, season))
+    except:
+        print('NO TEAM DATA:', tid, season)
+        return []
+
+    try:
+        data = data.json()
+    except:
+        print('JSON PROCESSING ERROR TEAM:', tid, season)
+        return []
 
     if 'events' not in data:
         print('NO TEAM DATA:', tid, season)
@@ -72,13 +86,24 @@ def get_team_post_gids(tid, season):
             2006-2018
     """
     # the ESPN link that contains all the postseason schedule results for team
-    data = requests.get('https://site.web.api.espn.com/apis/site/v2/sports/'
-                        'basketball/mens-college-basketball/teams/{}/schedule?'
-                        'region=us&lang=en&seasontype=3&'
-                        'season={}'.format(tid, season)).json()
+    data = None
+    try:
+        data = requests.get('https://site.web.api.espn.com/apis/site/v2/'
+                            'sports/basketball/mens-college-basketball/'
+                            'teams/{}/schedule?lang=en&seasontype=3&'
+                            'season={}'.format(tid, season)).json()
+    except:
+        print('NO POST TEAM DATA:', tid, season)
+        return[]
+
+    try:
+        data = data.json()
+    except:
+        print('JSON PROCESSING ERROR POST TEAM:', tid, season)
+        return []
 
     if 'events' not in data:
-        print('NO POST-SEASON TEAM DATA:', tid, season)
+        print('NO POST TEAM DATA:', tid, season)
         return []
 
     game_ids = [int(game['id']) for game in data['events']]
