@@ -175,6 +175,18 @@ class FeatureGenerators():
 
         return _func
 
+    def _getPF(game, tid):
+        """Gets the points for the team for this game.
+
+        Arguments:
+            game: The game data object.
+            tid: The target team to calculate for.
+        """
+        if game['homeId'] == tid:
+            return float(game['score'][0])
+        else:
+            return float(game['score'][1])
+
     def _getPA(game, tid):
         """Gets the points against the team for this game.
 
@@ -230,22 +242,19 @@ class FeatureGenerators():
             'seasonAST': getAverageFeature(getStatisticFunc('AST')),
             'seasonFT': getAverageFeature(getStatisticFunc('FT')),
             'seasonTO': getAverageFeature(getStatisticFunc('TO')),
-            'seasonPF': getAverageFeature(getStatisticFunc('PF')),
+            'seasonPF': getAverageFeature(_getPF),
             'seasonPA': getAverageFeature(_getPA),
             'seasonFG%': getAverageFeature(_getFGPct),
             'season3PT%': getAverageFeature(_get3PTPct),
             }
 
 
-def generate_features(data, isjson, **kwargs):
+def generate_features(data, **kwargs):
     """Generate the features from the raw data as downloaded from scrape.py
     Returns two tables: X and y for features and labels
 
     Arguments:
         data: The raw data dictionary as given by scrape.py
-        isjson: Whether the data came straight from a json file. Necessary
-            since otherwise we need to change the way keys are processed as
-            either integers or strings
         kwargs: Which features to include/exclude and verbosity
             verbose: If positive gives error messages
                      If greater than 1 gives other useful debug messages
@@ -263,8 +272,12 @@ def generate_features(data, isjson, **kwargs):
     def _json_date(gid):
         """returns the datetime of the given gid
         """
-        if isjson:
+        # json compatibility. If just read from a file then the keys to dicts
+        # get converted to strings
+        if gid not in data:
             gid = str(gid)
+        if gid not in data:
+            gid = int(gid)
         return datetime.datetime.strptime(data[gid]['date'],
                                           '%Y-%m-%dT%H:%MZ')
 
@@ -282,9 +295,6 @@ def generate_features(data, isjson, **kwargs):
     series_idx = 0
 
     for year in data['years']:
-        if isjson:
-            year = str(year)
-
         # we generate quite a few different features. While we borrow some from
         # ESPN directly, we also create some of our own (as well as sort them
         # for convenience when training temporal models).
@@ -317,11 +327,23 @@ def generate_features(data, isjson, **kwargs):
         features_unmatched = {}
 
         for tid in data['teams']:
+            # json compatibility
+            if year not in data['teams'][tid]:
+                year = str(year)
+
+            # preprocess the list we have, make sure they exist in the table
+            gids = data['teams'][tid][year]['reg']
+            for gid in gids:
+                if str(gid) not in data and int(gid) not in data:
+                    data['teams'][tid][year]['reg'].remove(gid)
+
             # sort all the games this season
             series_gids = sorted(data['teams'][tid][year]['reg'],
                                  key=_json_date)
-            tid = int(tid)  # for json compatibility since keys turn to ints
-            series = [data[str(gid)] if isjson else data[gid]
+            # for json compatibility since keys turn to ints
+            tid = int(tid)
+
+            series = [data[str(gid)] if gid not in data else data[gid]
                       for gid in series_gids]
 
             for game in series:
@@ -357,7 +379,7 @@ def generate_features(data, isjson, **kwargs):
             # the sorting of the games since otherwise the memory becomes too
             # large when we have 350 teams with 27-29 games
             series_gids = sorted(data['teams'][tid][year]['reg'],
-                                 key=_json_date)
+                                 key=_json_date)  # already checked existance
 
             # no more calls to data, so can change to int because
             # features_unmatched always uses integers on internal
@@ -372,7 +394,7 @@ def generate_features(data, isjson, **kwargs):
             # than a range of possible scores.
             teamY = np.full((teamX.shape[0], 1), 0, dtype=int)
             for i, gid in enumerate(series_gids):
-                game = data[str(gid)] if isjson else data[gid]
+                game = data[str(gid)] if gid not in data else data[gid]
 
                 # get the result of the game and the opposing team's id
                 opp_tid = -1
