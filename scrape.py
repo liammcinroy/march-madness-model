@@ -322,6 +322,10 @@ def main():
     """
     args = parse_args()
 
+    if not os.path.exists(args.folder):
+        print('INVALID FOLDER')
+        exit(1)
+
     # save each year individually
     for year in range(2006, 2019):
         # don't download if we already have it

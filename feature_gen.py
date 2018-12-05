@@ -285,7 +285,7 @@ def generate_features(data, **kwargs):
     features = {name: func for name, func in FeatureGenerators.ALL.items()
                 if name not in kwargs.get('exclude_features', [])}
 
-    printveryverbose(features)
+    printverbose('Features:', *features.keys())
 
     # The X, y consisting of the series, not individual datapoints
     X_series = []
@@ -347,7 +347,8 @@ def generate_features(data, **kwargs):
                       for gid in series_gids]
 
             for game in series:
-                printveryverbose(game['date'])  # sanity check for sorting
+                printveryverbose('Series ordering check:', tid, year,
+                                 game['date'])  # sanity check for sorting
 
             # the training features for this team FOR this season only
             # go through all the features, but sort by name so that get the
@@ -367,7 +368,7 @@ def generate_features(data, **kwargs):
                     # rest of them and don't bother setting any values for
                     # this specific generator for that series. The rest will
                     # fill in if they succeed in generating
-                    printveryverbose('ERROR generating:', tid, name)
+                    printveryverbose('ERROR generating:', tid, year, name)
 
         # now that we have all the features for every team for every game,
         # we can generate the final tables
@@ -431,6 +432,12 @@ def parse_args():
                         help='The file which the raw downloaded data is in.')
     parser.add_argument('outfile', type=str,
                         help='The file to save the generated features to.')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Whether to output a verbose, but not complete, '
+                             'messages during generation.')
+    parser.add_argument('-d', '--debug', action='store_true',
+                        help='Whether to output the debugging level of '
+                             'verbose messages during execution.')
     return parser.parse_args()
 
 
@@ -443,9 +450,14 @@ def main():
     with open(args.infile, 'r') as f:
         data = json.load(f)
 
-    X, y = generate_features(data)
+    verbose = 0
+    if args.verbose:
+        verbose = 1
+    if args.debug:
+        verbose = 2
+    X, y = generate_features(data, verbose=verbose)
     with open(args.outfile, 'w') as f:
-        json.dump((X, y))
+        json.dump((X.tolist(), y.tolist()), f)
 
 
 if __name__ == '__main__':

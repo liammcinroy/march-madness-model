@@ -24,9 +24,9 @@ Further details about how the data is scraped and what other options may be spec
 
 After the raw data from ESPN is obtained, then it must be converted into a format which is easily trainable and conforms to `sklearn`'s standard. This is done in the `feature_gen` module, which also implements some nontrivial features which are obtained from the data. This can be done from the command line via
 
-`python3 feature_gen.py infile outfile`
+`python3 feature_gen.py [-v] [-d] infile outfile`
 
-where `infile` is the ESPN datafile from `scrape` and `outfile` is the file which will contain all of the training features and labels.
+where `infile` is the ESPN datafile from `scrape` and `outfile` is the file which will contain all of the training features and labels. The `-v` option allows for minimal verbose feature generation messages while creating the features, while `-d` allows for much more detailed output.
 
 Further details about which features are generated and how to exclude certain ones can be found in [`DESIGN.md`](DESIGN.md).
 
@@ -34,6 +34,6 @@ Further details about which features are generated and how to exclude certain on
 
 The final step in creating a model is training and evaluating its performance. This is done in `train_models`, and can be called from the command line by
 
-`python3 train_models.py datafile modeltype`
+`python3 train_models.py datafile modeltype [-v]`
 
-where `datafile` points to the generated features file from `feature_gen` and `modeltype` is one of `TODO`. The output of `train_models.py` is the model's accuracy according to [K-fold cross validation](https://www.cs.cmu.edu/~schneide/tut5/node42.html), which estimates the generalization power of the models while still being able to train on the entire dataset. This allows us to choose the most accurate model.
+where `datafile` points to the generated features file from `feature_gen` and `modeltype` is one of `naive_non_stat, TODO`. The output of `train_models.py` is the model's accuracy according to [K-fold cross validation](https://www.cs.cmu.edu/~schneide/tut5/node42.html), which estimates the generalization power of the models while still being able to train on the entire dataset. This allows us to choose the most accurate model. The `-v` option will output more information during the cross validation about the accuracy of the model.
