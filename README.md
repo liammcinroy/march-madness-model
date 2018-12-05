@@ -37,3 +37,5 @@ The final step in creating a model is training and evaluating its performance. T
 `python3 train_models.py datafile modeltype [-v]`
 
 where `datafile` points to the generated features file from `feature_gen` and `modeltype` is one of `naive_non_stat, TODO`. The output of `train_models.py` is the model's accuracy according to [K-fold cross validation](https://www.cs.cmu.edu/~schneide/tut5/node42.html), which estimates the generalization power of the models while still being able to train on the entire dataset. This allows us to choose the most accurate model. The `-v` option will output more information during the cross validation about the accuracy of the model.
+
+The `naive_non_stat` model is the current best, achieving an accuracy rate of nearly `70%`.

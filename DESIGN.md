@@ -43,4 +43,12 @@ Finally, note that all the functions implemented in `feature_gen.py` are designe
 
 ## `train_models.py`
 
+There are several different models defined in `train_models.py` and are identified by `_MODELS`. We give a brief description of each model below
 
+#### `naive_non_stat`
+
+This model is a simple Bayesian classifier (implemented using [`pomegranate`](https://github.com/jmschrei/pomegranate/tree/master/pomegranate)) which trains a multivariate gaussian distribution over the all of the non-statistics based features. This means the features which we have for every team, namely `atHome`, `win%`, `streak`, `seasonPF`, `seasonPA`, and `seasonWin%Ranked` since ESPN has always collected the data necessary to compute these features. Then, the model is trained on each game as if they were independent (which they aren't but it's easier to test preliminarily). We choose to exclude certain features so that we can capture as many data points as possible. This nets us over 133,000 training examples, which is nearly `70,000` games. With a fold of `5`, it looks like the model has a successful prediction rate of nearly `70%`.
+
+#### `naive_stat`
+
+This is the exact same as `naive_non_stat`, except for it uses the additional statistics information which ESPN provides. However, since this data is missing for many games, then we must exclude those games so we end up with 86,000 training examples instead (or 43,000 games). This model performs worse than `naive_non_stat`, likely because there are too many variables with no structure defined between them. It achieves `57%` accuracy, which is still better than random guessing.
