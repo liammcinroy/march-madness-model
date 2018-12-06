@@ -10,6 +10,8 @@ import json
 
 import numpy as np
 
+from pomegranate import HiddenMarkovModel, MultivariateGaussianDistribution
+
 
 def _teamWon(game, tid):
     """Determines if the targeted team won the game.
@@ -247,6 +249,40 @@ class FeatureGenerators():
             'seasonFG%': getAverageFeature(_getFGPct),
             'season3PT%': getAverageFeature(_get3PTPct),
             }
+
+    @classmethod
+    def GetHiddenSpace(cls, X, n_components):
+        """This method creates more features by training a HiddenMarkovModel
+        on the game statistics, then returns the hidden state space of each
+        timestep/game as a new feature. HOWEVER, note that this doesn't
+        return a list of features, instead it returns a HMM that can generate
+        more features but can still be used for classification also.
+
+        Arguments:
+            X: the input features (with a series_idx)
+            n_components: The number of hidden state space variables to
+                initialize. Note that (sadly) pomegranate does not implement
+                continuous HMMs, so it will discretize every continuous
+                variable by K-means so then the outputted space will be
+                discrete.
+        """
+        # the last series id, none are negative so we will get a new one
+        last_series_idx = -1
+        # restrict down, but since a temporal we need to make a list of entries
+        _X = []
+        for row in X:
+            if row[0] != last_series_idx:
+                # create a new series to train on, start with empty input
+                # series then add to them while the row has the same index
+                last_series_idx = row[0]
+                _X.append(np.full((0, 0), None, dtype=None))
+
+            # add the datapoint to the current series
+            _X[-1] = np.vstack((_X[-1], row))
+
+        # now train an HMM to the data
+        return HiddenMarkovModel.from_samples(MultivariateGaussianDistribution,
+                                              n_components, _X)
 
 
 def generate_features(data, **kwargs):

@@ -12,6 +12,76 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import KFold
 
 
+def get_non_stat_input(X, y):
+    """Get the inputs without the statistics identifiers
+
+    Arguments:
+        X: The initial features
+        y: The initial labels
+    """
+    # exclude the time series identifying features since we aren't using a
+    # temporal model
+    _X = X[:, 1:]
+
+    # get the features which don't have unknown values (just examine over the
+    # target team's features, then double them over for the opposition's too
+    cols = [jj for j in range(int(_X.shape[1] / 2)) if None not in _X[:, j]
+            for jj in (j, j + int(_X.shape[1] / 2))]
+
+    # restrict to not have unknown features
+    _X = _X[:, cols]
+
+    # get the rows which have valid data throughout
+    rows = [i for i in range(_X.shape[0]) if None not in _X[i]]
+
+    # restrict down
+    return _X[rows], y[rows]
+
+
+def get_stat_inputs(X, y):
+    """Gets the input with the statistics identifiers, but cleans for learning
+
+    Arguments:
+        X: The initial features
+        y: The initial labels
+    """
+    _X = X[:, 1:]
+
+    # get the rows which have valid data throughout
+    rows = [i for i in range(_X.shape[0]) if None not in _X[i]]
+
+    return X[rows, 1:], y[rows]
+
+
+def get_comp_stat_inputs(X, y):
+    """Gets the input with the statistics identifiers, but cleans for learning
+    and also gives the difference in the statistics for each feature.
+
+    Arguments:
+        X: The initial features
+        y: The initial labels
+    """
+    # This one's inputs are only half the size, because the difference in each
+    # feature is computed instead of trying to learn over all of them
+    num_features = int((X.shape[1] - 1) / 2)
+
+    # get the rows which have valid data throughout
+    rows = [i for i in range(X.shape[0]) if None not in X[i]]
+
+    # restrict down
+    _X = X[rows, 0:num_features]
+
+    # put if our team is home (1), away (-1), or neutral (0)
+    _X[:, 0] = [1 if X[i, 1] else (-1 if X[i, 1 + num_features] else 0)
+                for i in rows]
+
+    # now we have to skip to start at n + 2 since we skip whether other team
+    # is home or away
+    _X[:, 1:] = X[rows, 2:num_features + 1] - X[rows, num_features + 2:]
+
+    return _X, y[rows]
+
+
 def train_naive_non_stat_bayes(X, y, **kwargs):
     """Train a naive bayesian model on the given features data, which doesn't
     use many of the team statistics since they're unreliably provided.
@@ -29,27 +99,9 @@ def train_naive_non_stat_bayes(X, y, **kwargs):
         if kwargs.get('verbose', 0) > 0:
             print(*msg)
 
-    # exclude the time series identifying features since we aren't using a
-    # temporal model
-    _X = X[:, 1:]
+    _X, _y = get_non_stat_input(X, y)
 
-    # get the features which don't have unknown values (just examine over the
-    # target team's features, then double them over for the opposition's too
-    cols = [jj for j in range(int(_X.shape[1] / 2)) if None not in _X[:, j]
-            for jj in (j, j + int(_X.shape[1] / 2))]
-    printverbose('Valid feature columns:', cols)
-
-    # restrict to not have unknown features
-    _X = _X[:, cols]
-
-    # get the rows which have valid data throughout
-    rows = [i for i in range(_X.shape[0]) if None not in _X[i]]
-    printverbose('Number of valid training samples', len(rows))
-
-    # restrict down
-    _X = _X[rows]
-    _y = y[rows]
-
+    printverbose('Training with {} features'.format(_X.shape[1]))
     printverbose('Training on {} samples'.format(_X.shape[0]))
 
     # begin the training routine. We use K-fold to estimate the accuracy and
@@ -87,19 +139,9 @@ def train_naive_stat_bayes(X, y, **kwargs):
         if kwargs.get('verbose', 0) > 0:
             print(*msg)
 
-    # exclude the time series identifying features since we aren't using a
-    # temporal model
-    _X = X[:, 1:]
+    _X, _y = get_stat_inputs(X, y)
+
     printverbose('Training with {} features'.format(_X.shape[1]))
-
-    # get the rows which have valid data throughout
-    rows = [i for i in range(_X.shape[0]) if None not in _X[i]]
-    printverbose('Number of valid training samples', len(rows))
-
-    # restrict down
-    _X = _X[rows]
-    _y = y[rows]
-
     printverbose('Training on {} samples'.format(_X.shape[0]))
 
     # begin the training routine. We use K-fold to estimate the accuracy and
@@ -139,26 +181,9 @@ def train_comp_naive_stat_bayes(X, y, **kwargs):
         if kwargs.get('verbose', 0) > 0:
             print(*msg)
 
-    # This one's inputs are only half the size, because the difference in each
-    # feature is computed instead of trying to learn over all of them
-    num_features = int((X.shape[1] - 1) / 2)
-    printverbose('Training with {} features'.format(num_features))
+    _X, _y = get_comp_stat_inputs(X, y)
 
-    # get the rows which have valid data throughout
-    rows = [i for i in range(X.shape[0]) if None not in X[i]]
-    printverbose('Number of valid training samples', len(rows))
-
-    # restrict down
-    _X = X[rows, 0:num_features]
-    _y = y[rows]
-
-    # put if our team is home (1), away (-1), or neutral (0)
-    _X[:, 0] = [1 if X[i, 1] else (-1 if X[i, 1 + num_features] else 0)
-                for i in rows]
-
-    # now we have to skip to start at n + 2 since we skip whether other team
-    # is home or away
-    _X[:, 1:] = X[rows, 2:num_features + 1] - X[rows, num_features + 2:]
+    printverbose('Training with {} features'.format(_X.shape[1]))
     printverbose('Training on {} samples'.format(_X.shape[0]))
 
     # begin the training routine. We use K-fold to estimate the accuracy and
@@ -179,10 +204,23 @@ def train_comp_naive_stat_bayes(X, y, **kwargs):
     print('Cumulative accuracy after {} folds: {}'.format(k + 1, cum_acc))
 
 
-def train_temporal_bayes(X, y, **kwargs):
+def train_temporal_comp_stat_bayes(X, y, **kwargs):
     """Train a bayesian model which incorporates recent game results to
     estimate the momentum the team currently has (also could possibly
-    marginalize over the momentum lost by player injuries?)
+    marginalize over the momentum lost by player injuries?). Note that we
+    assume that each opponent's prior history is conditionally independent
+    of the result of the game given the target team's prior games. Not a great
+    assumption but better than assuming that both team's prior performances are
+    independent of the result of the game.
+
+    We could also marginalize over of the prediction of the result of the game
+    as predicted for the opposing team, but that still wouldn't quite be
+    theoretically justified (although also closer).
+
+    This specific model uses the comparative features in comp_naive_stat.
+
+    Sadly, must note that pomegranate doesn't have Kalman filters, it instead
+    discretizes the continuous space to make the HMM but it'll do.
 
     Arguments:
         X: The features generated by feature_gen.py to train from
@@ -201,6 +239,7 @@ def train_temporal_bayes(X, y, **kwargs):
 _MODELS = {'naive_non_stat': train_naive_non_stat_bayes,
            'naive_stat': train_naive_stat_bayes,
            'comp_naive_stat': train_comp_naive_stat_bayes,
+           'temporal_comp_stat': train_temporal_comp_stat_bayes,
            }
 
 
