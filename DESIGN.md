@@ -52,3 +52,7 @@ This model is a simple Bayesian classifier (implemented using [`pomegranate`](ht
 #### `naive_stat`
 
 This is the exact same as `naive_non_stat`, except for it uses the additional statistics information which ESPN provides. However, since this data is missing for many games, then we must exclude those games so we end up with 86,000 training examples instead (or 43,000 games). This model performs worse than `naive_non_stat`, likely because there are too many variables with no structure defined between them. It achieves `57%` accuracy, which is still better than random guessing.
+
+#### `comp_naive_stat`
+
+Since `naive_stat` seemed to fail at learning any better despite having more data to learn from, then we attempt to simplify the model further. Therefore, `comp_naive_stat` has the exact same dataset, except for it subtracts the opposition's statistical values from this team's statistics, so there are half as many features to learn from. This still isn't a great model and there isn't enough data to find the truly most influential values, but it improves on `naive_stat` to `60%` accuracy, so we're on the right track.
