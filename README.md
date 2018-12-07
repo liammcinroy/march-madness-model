@@ -1,10 +1,12 @@
-# 
+# Predicting March Madness
 
 ## Installation
 
 This was developed using Python 3.5.2, but should work with any more recent release as well. To get the required python packages, simply execute
 
 `python3 -m pip install -r requirements.txt`.
+
+There is also a [tutorial video](https://youtu.be/QtTvtY5cc7o).
 
 ## Use
 
