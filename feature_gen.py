@@ -251,7 +251,7 @@ class FeatureGenerators():
             }
 
     @classmethod
-    def GetHiddenSpace(cls, X, n_components):
+    def HiddenSpaceGenerator(cls, X, n_components):
         """This method creates more features by training a HiddenMarkovModel
         on the game statistics, then returns the hidden state space of each
         timestep/game as a new feature. HOWEVER, note that this doesn't
@@ -275,10 +275,10 @@ class FeatureGenerators():
                 # create a new series to train on, start with empty input
                 # series then add to them while the row has the same index
                 last_series_idx = row[0]
-                _X.append(np.full((0, 0), None, dtype=None))
+                _X.append(np.full((0, X.shape[1] - 1), None, dtype=None))
 
             # add the datapoint to the current series
-            _X[-1] = np.vstack((_X[-1], row))
+            _X[-1] = np.vstack((_X[-1], row[1:]))
 
         # now train an HMM to the data
         return HiddenMarkovModel.from_samples(MultivariateGaussianDistribution,

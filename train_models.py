@@ -11,17 +11,48 @@ from pomegranate import BayesClassifier, MultivariateGaussianDistribution
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import KFold
 
+from feature_gen import FeatureGenerators
 
-def get_non_stat_input(X, y):
+
+def get_series_form(X):
+    """Returns the series form of the features with series ids, so a list of
+    matrices is generated, each WITHOUT the series id
+
+    Arguments:
+        X: The entire matrix of features with first column the series id
+    """
+    # the last series id, none are negative so we will get a new one
+    last_series_idx = -1
+    # restrict down, but since a temporal we need to make a list of entries
+    _X = []
+    for row in X:
+        if row[0] != last_series_idx:
+            # create a new series to train on, start with empty input
+            # series then add to them while the row has the same index
+            last_series_idx = row[0]
+            _X.append(np.full((0, X.shape[1] - 1), None, dtype=None))
+
+        # add the datapoint to the current series
+        # print(_X[-1], row[1:])
+        try:
+            _X[-1] = np.vstack((_X[-1], row[1:]))
+        except Exception as e:
+            print(_X[-1], row[1:])
+            raise e
+    return _X
+
+
+def get_non_stat_inputs(X, y, keepSeriesID=False):
     """Get the inputs without the statistics identifiers
 
     Arguments:
         X: The initial features
         y: The initial labels
+        keepSeriesID: Whether to remove the series ID in processing
     """
-    # exclude the time series identifying features since we aren't using a
+    # exclude the time series identifying features if we aren't using a
     # temporal model
-    _X = X[:, 1:]
+    _X = X[:, (1 - int(keepSeriesID)):]
 
     # get the features which don't have unknown values (just examine over the
     # target team's features, then double them over for the opposition's too
@@ -38,14 +69,15 @@ def get_non_stat_input(X, y):
     return _X[rows], y[rows]
 
 
-def get_stat_inputs(X, y):
+def get_stat_inputs(X, y, keepSeriesID=False):
     """Gets the input with the statistics identifiers, but cleans for learning
 
     Arguments:
         X: The initial features
         y: The initial labels
+        keepSeriesID: Whether to remove the series id during processing
     """
-    _X = X[:, 1:]
+    _X = X[:, (1 - int(keepSeriesID)):]
 
     # get the rows which have valid data throughout
     rows = [i for i in range(_X.shape[0]) if None not in _X[i]]
@@ -53,13 +85,14 @@ def get_stat_inputs(X, y):
     return X[rows, 1:], y[rows]
 
 
-def get_comp_stat_inputs(X, y):
+def get_comp_stat_inputs(X, y, keepSeriesID=False):
     """Gets the input with the statistics identifiers, but cleans for learning
     and also gives the difference in the statistics for each feature.
 
     Arguments:
         X: The initial features
         y: The initial labels
+        keepSeriesID: Whether to remove the series id during processing
     """
     # This one's inputs are only half the size, because the difference in each
     # feature is computed instead of trying to learn over all of them
@@ -69,15 +102,17 @@ def get_comp_stat_inputs(X, y):
     rows = [i for i in range(X.shape[0]) if None not in X[i]]
 
     # restrict down
-    _X = X[rows, 0:num_features]
+    _X = X[rows, 0:num_features + int(keepSeriesID)]
 
     # put if our team is home (1), away (-1), or neutral (0)
-    _X[:, 0] = [1 if X[i, 1] else (-1 if X[i, 1 + num_features] else 0)
-                for i in rows]
+    _X[:, int(keepSeriesID)] = \
+        [1 if X[i, 1] else (-1 if X[i, 1 + num_features] else 0)
+         for i in rows]
 
     # now we have to skip to start at n + 2 since we skip whether other team
     # is home or away
-    _X[:, 1:] = X[rows, 2:num_features + 1] - X[rows, num_features + 2:]
+    _X[:, (1 + int(keepSeriesID)):] = \
+        X[rows, 2:num_features + 1] - X[rows, num_features + 2:]
 
     return _X, y[rows]
 
@@ -99,7 +134,7 @@ def train_naive_non_stat_bayes(X, y, **kwargs):
         if kwargs.get('verbose', 0) > 0:
             print(*msg)
 
-    _X, _y = get_non_stat_input(X, y)
+    _X, _y = get_non_stat_inputs(X, y)
 
     printverbose('Training with {} features'.format(_X.shape[1]))
     printverbose('Training on {} samples'.format(_X.shape[0]))
@@ -204,18 +239,166 @@ def train_comp_naive_stat_bayes(X, y, **kwargs):
     print('Cumulative accuracy after {} folds: {}'.format(k + 1, cum_acc))
 
 
+def train_temporal_non_stat_bayes(X, y, **kwargs):
+    """Train a bayesian model which incorporates recent game results to
+    estimate the momentum the team currently has (also could possibly
+    marginalize over the momentum lost by player injuries?) through the hidden
+    state space of a trained HMM. However, note that we assume that each
+    opponent's prior history is conditionally independent of the result of the
+    game given the target team's prior games. Not a great assumption but better
+    than assuming that both team's prior performances are independent of the
+    result of the game.
+
+    We could also marginalize over of the prediction of the result of the game
+    as predicted for the opposing team by adding it its HMM features, but that
+    still wouldn't quite be theoretically justified (although also closer) and
+    is enormously more expensive.
+
+    This specific model uses the non-game specific statistics from
+    get_non_stat_inputs
+
+    Sadly, must note that pomegranate doesn't have Kalman filters, it instead
+    discretizes the continuous space to make the HMM but it'll do.
+
+    Arguments:
+        X: The features generated by feature_gen.py to train from
+        y: The classes
+        kwargs: For verbosity
+            verbose: If greater than zero, then outputs basic information
+                about the training process during training. Default 0.
+            n_splits: The number of folds to use during KFold cross validation
+                Default 5.
+            n_components: The number of hidden states to use for feature
+                generation with the HMM. Default 2 (winning/losing)
+    """
+    def printverbose(*msg):
+        if kwargs.get('verbose', 0) > 0:
+            print(*msg)
+
+    _X, _y = get_non_stat_inputs(X, y, keepSeriesID=True)
+
+    # size of _X.shape[1] with series ID since it gets replaced by hidden state
+    printverbose('Training with {} features'.format(_X.shape[1]))
+    printverbose('Training on {} samples'.format(_X.shape[0]))
+
+    # begin the training routine. We use K-fold to estimate the accuracy and
+    # generalization power of the models
+    sk_fold = KFold(n_splits=kwargs.get('n_splits', 5))
+    cum_acc = 0
+    for k, (train_idx, test_idx) in enumerate(sk_fold.split(_X, _y)):
+        hmm = \
+            FeatureGenerators.HiddenSpaceGenerator(_X[train_idx],
+                                                   kwargs.get('n_components',
+                                                              2))
+        # since one dimensional feature (with a different label for each
+        # component, then we instead stack vertically across all the series
+        # predictions then glue onto the end of the normal inputs
+        hiddenTrain = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                 for x in get_series_form(_X[train_idx])))
+        clf = BayesClassifier.from_samples(MultivariateGaussianDistribution,
+                                           np.hstack((_X[train_idx, 1:],
+                                                      hiddenTrain)),
+                                           _y[train_idx].flatten())
+
+        hiddenTest = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                for x in get_series_form(_X[test_idx])))
+        acc = accuracy_score(_y[test_idx].flatten(),
+                             clf.predict(np.hstack((_X[test_idx, 1:],
+                                                    hiddenTest))))
+        printverbose('Fold {} accuracy: {}'.format(k + 1, acc))
+        cum_acc = (k * cum_acc + acc) / (k + 1.)
+        printverbose('\tCurrent cumulative accuracy:', cum_acc)
+
+    print('Cumulative accuracy after {} folds: {}'.format(k + 1, cum_acc))
+
+
+def train_temporal_stat_bayes(X, y, **kwargs):
+    """Train a bayesian model which incorporates recent game results to
+    estimate the momentum the team currently has (also could possibly
+    marginalize over the momentum lost by player injuries?) through the hidden
+    state space of a trained HMM. However, note that we assume that each
+    opponent's prior history is conditionally independent of the result of the
+    game given the target team's prior games. Not a great assumption but better
+    than assuming that both team's prior performances are independent of the
+    result of the game.
+
+    We could also marginalize over of the prediction of the result of the game
+    as predicted for the opposing team by adding it its HMM features, but that
+    still wouldn't quite be theoretically justified (although also closer) and
+    is enormously more expensive.
+
+    This specific model uses all the game-specific statistics from
+    get_stat_inputs
+
+    Sadly, must note that pomegranate doesn't have Kalman filters, it instead
+    discretizes the continuous space to make the HMM but it'll do.
+
+    Arguments:
+        X: The features generated by feature_gen.py to train from
+        y: The classes
+        kwargs: For verbosity
+            verbose: If greater than zero, then outputs basic information
+                about the training process during training. Default 0.
+            n_splits: The number of folds to use during KFold cross validation
+                Default 5.
+            n_components: The number of hidden states to use for feature
+                generation with the HMM. Default 2 (winning/losing)
+    """
+    def printverbose(*msg):
+        if kwargs.get('verbose', 0) > 0:
+            print(*msg)
+
+    _X, _y = get_stat_inputs(X, y, keepSeriesID=True)
+
+    # size of _X.shape[1] with series ID since it gets replaced by hidden state
+    printverbose('Training with {} features'.format(_X.shape[1]))
+    printverbose('Training on {} samples'.format(_X.shape[0]))
+
+    # begin the training routine. We use K-fold to estimate the accuracy and
+    # generalization power of the models
+    sk_fold = KFold(n_splits=kwargs.get('n_splits', 5))
+    cum_acc = 0
+    for k, (train_idx, test_idx) in enumerate(sk_fold.split(_X, _y)):
+        hmm = \
+            FeatureGenerators.HiddenSpaceGenerator(_X[train_idx],
+                                                   kwargs.get('n_components',
+                                                              2))
+        # since one dimensional feature (with a different label for each
+        # component, then we instead stack vertically across all the series
+        # predictions then glue onto the end of the normal inputs
+        hiddenTrain = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                 for x in get_series_form(_X[train_idx])))
+        clf = BayesClassifier.from_samples(MultivariateGaussianDistribution,
+                                           np.hstack((_X[train_idx, 1:],
+                                                      hiddenTrain)),
+                                           _y[train_idx].flatten())
+
+        hiddenTest = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                for x in get_series_form(_X[test_idx])))
+        acc = accuracy_score(_y[test_idx].flatten(),
+                             clf.predict(np.hstack((_X[test_idx, 1:],
+                                                    hiddenTest))))
+        printverbose('Fold {} accuracy: {}'.format(k + 1, acc))
+        cum_acc = (k * cum_acc + acc) / (k + 1.)
+        printverbose('\tCurrent cumulative accuracy:', cum_acc)
+
+    print('Cumulative accuracy after {} folds: {}'.format(k + 1, cum_acc))
+
+
 def train_temporal_comp_stat_bayes(X, y, **kwargs):
     """Train a bayesian model which incorporates recent game results to
     estimate the momentum the team currently has (also could possibly
-    marginalize over the momentum lost by player injuries?). Note that we
-    assume that each opponent's prior history is conditionally independent
-    of the result of the game given the target team's prior games. Not a great
-    assumption but better than assuming that both team's prior performances are
-    independent of the result of the game.
+    marginalize over the momentum lost by player injuries?) through the hidden
+    state space of a trained HMM. However, note that we assume that each
+    opponent's prior history is conditionally independent of the result of the
+    game given the target team's prior games. Not a great assumption but better
+    than assuming that both team's prior performances are independent of the
+    result of the game.
 
     We could also marginalize over of the prediction of the result of the game
-    as predicted for the opposing team, but that still wouldn't quite be
-    theoretically justified (although also closer).
+    as predicted for the opposing team by adding it its HMM features, but that
+    still wouldn't quite be theoretically justified (although also closer) and
+    is enormously more expensive.
 
     This specific model uses the comparative features in comp_naive_stat.
 
@@ -230,8 +413,48 @@ def train_temporal_comp_stat_bayes(X, y, **kwargs):
                 about the training process during training. Default 0.
             n_splits: The number of folds to use during KFold cross validation
                 Default 5.
+            n_components: The number of hidden states to use for feature
+                generation with the HMM. Default 2 (winning/losing)
     """
-    return NotImplementedError()
+    def printverbose(*msg):
+        if kwargs.get('verbose', 0) > 0:
+            print(*msg)
+
+    _X, _y = get_comp_stat_inputs(X, y, keepSeriesID=True)
+
+    # size of _X.shape[1] with series ID since it gets replaced by hidden state
+    printverbose('Training with {} features'.format(_X.shape[1]))
+    printverbose('Training on {} samples'.format(_X.shape[0]))
+
+    # begin the training routine. We use K-fold to estimate the accuracy and
+    # generalization power of the models
+    sk_fold = KFold(n_splits=kwargs.get('n_splits', 5))
+    cum_acc = 0
+    for k, (train_idx, test_idx) in enumerate(sk_fold.split(_X, _y)):
+        hmm = \
+            FeatureGenerators.HiddenSpaceGenerator(_X[train_idx],
+                                                   kwargs.get('n_components',
+                                                              2))
+        # since one dimensional feature (with a different label for each
+        # component, then we instead stack vertically across all the series
+        # predictions then glue onto the end of the normal inputs
+        hiddenTrain = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                 for x in get_series_form(_X[train_idx])))
+        clf = BayesClassifier.from_samples(MultivariateGaussianDistribution,
+                                           np.hstack((_X[train_idx, 1:],
+                                                      hiddenTrain)),
+                                           _y[train_idx].flatten())
+
+        hiddenTest = np.vstack((np.array(hmm.predict(x)).reshape(-1, 1)
+                                for x in get_series_form(_X[test_idx])))
+        acc = accuracy_score(_y[test_idx].flatten(),
+                             clf.predict(np.hstack((_X[test_idx, 1:],
+                                                    hiddenTest))))
+        printverbose('Fold {} accuracy: {}'.format(k + 1, acc))
+        cum_acc = (k * cum_acc + acc) / (k + 1.)
+        printverbose('\tCurrent cumulative accuracy:', cum_acc)
+
+    print('Cumulative accuracy after {} folds: {}'.format(k + 1, cum_acc))
 
 
 # The collection of models trainable on. The 'model' command line argument
@@ -239,6 +462,8 @@ def train_temporal_comp_stat_bayes(X, y, **kwargs):
 _MODELS = {'naive_non_stat': train_naive_non_stat_bayes,
            'naive_stat': train_naive_stat_bayes,
            'comp_naive_stat': train_comp_naive_stat_bayes,
+           'temporal_non_stat': train_temporal_non_stat_bayes,
+           'temporal_stat': train_temporal_stat_bayes,
            'temporal_comp_stat': train_temporal_comp_stat_bayes,
            }
 
@@ -248,7 +473,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(
         description='Training a model and getting an estimated level of '
-                    'accuracy using Leave-One-Out cross validation.')
+                    'accuracy using K-fold cross validation.')
     parser.add_argument('data', type=str,
                         help='The feature, labels datasets to train on. '
                              'Should have been generated by feature_gen.py')

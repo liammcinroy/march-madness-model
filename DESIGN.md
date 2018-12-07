@@ -37,13 +37,15 @@ Since we want the functionality to create a temporal model which examines a team
 
 At the conclusion of this computation, then `X` and `y` are returned and saved to a JSON file.
 
-
-
 Finally, note that all the functions implemented in `feature_gen.py` are designed to be functional when imported as well, and contain more specific documentation on their exact use in the source.
+
+#### `FeatureGenerators.HiddenSpaceGenerator`
+
+This function takes an already formed feature dataset and trains a Hidden Markov Model over it to attempt to generate more entirely machine learning based features that model the team's performance over time. The HMM then examines a team's performance over time and generates its hidden state for each game, which it then appends to the features that the final classifier will use to predict the outcome of each game. It still is not entirely theoretically justified, as it still creates the assumption that the outcome of each game given the both team's temporal history is conditionally independent of the outcome given just the targeted team's temporal history, but in practice it marginally improves performance. With more time, this could be applied to many of the features and then the final result could be marginalized over them all so that there are no unnecessary assumptions about the conditional independence of the outcome of the game.
 
 ## `train_models.py`
 
-There are several different models defined in `train_models.py` and are identified by `_MODELS`. We give a brief description of each model below
+There are several different models defined in `train_models.py` and are identified by `_MODELS`. We give a brief description of each model below, but note that each model has a `temporal` counterpart which includes the HMM hidden space feature mentioned above. These in practice perform better than the naive, nontemporal version (but insignificantly so).
 
 #### `naive_non_stat`
 
